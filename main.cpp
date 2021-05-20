@@ -1,7 +1,7 @@
 #include <iostream>
 #include "MpvSocket.h"
 #include "ChildProcess.h"
-#include "PropertyGetter.h"
+#include "MpvController.h"
 #include "Interface.h"
 
 
@@ -23,28 +23,25 @@ int main() try {
     }
 
 
-    // auto j_str = JSON_Object::forge("command",
-    //                                 JSON_Array::forge("set_property", "pause", true)).str();
-    // j_str += '\n';
-    // sock.Send(j_str);
+    MpvController mpv { sock };
 
-    auto cin_th = std::thread([&sock]() {
+
+    auto cin_th = std::thread([&mpv]() {
         std::string s;
         while (std::getline(std::cin, s)) {
             if (s == "play") {
-                sock.Send("{ \"command\": [\"set_property\", \"pause\", false] }\n");
+                mpv.SetProperty("pause", false);
             } else if (s == "pause") {
-                sock.Send("{ \"command\": [\"set_property\", \"pause\", true] }\n");
+                mpv.SetProperty("pause", true);
             } else if (s.substr(0, 5) == "seek ") {
                 int time = std::atoi(s.substr(5).c_str());
-                sock.Send("{ \"command\": [\"seek\", " +
-                        std::to_string(time) + ", \"relative\"] }\n");
-            } else {
+                mpv.Command({"seek", time, "relative"});
+            } else if (!s.empty()){
                 std::cout << "Unknown command\n";
             }
         }
         try {  // If mpv is closed this will throw
-            sock.Send("{ command: [\"quit\"] }\n");
+            mpv.Command({"quit"});
         } catch (const UnixSocket::exception& e) { }
     });
 
@@ -53,33 +50,29 @@ int main() try {
 
 
     std::optional<bool> paused;
-    PropertyGetter propertyGetter { sock };
     while (!mpv_process.Finished()) {
         std::string cmd = sock.Receive();
         if (!cmd.empty()) {
-            // std::cout << "cmd: " << cmd << '\n';
-            propertyGetter.onReceived(cmd);
+            std::cout << "cmd: " << cmd << '\n';
+            mpv.onReceived(cmd);
 
             if (cmd == R"({"event":"unpause"})") {
-                propertyGetter.GetProperty("playback-time", [&paused](std::string v) {
+                mpv.GetProperty("playback-time", [&paused](nlohmann::json v) {
                     if (paused.value_or(true) == false) { return; }
-                    float playback_time = std::atof(v.c_str());
-                    Interface::onUnpause(playback_time);
+                    Interface::onUnpause(v["data"]);
                     paused = false;
                 });
             }
             if (cmd == R"({"event":"pause"})") {
-                propertyGetter.GetProperty("playback-time", [&paused](std::string v) {
+                mpv.GetProperty("playback-time", [&paused](nlohmann::json v) {
                     if (paused.value_or(false) == true) { return; }
-                    float playback_time = std::atof(v.c_str());
-                    Interface::onPause(playback_time);
+                    Interface::onPause(v["data"]);
                     paused = true;
                 });
             }
             if (cmd == R"({"event":"seek"})") {
-                propertyGetter.GetProperty("playback-time", [](std::string v) {
-                    float playback_time = std::atof(v.c_str());
-                    Interface::onSeek(playback_time);
+                mpv.GetProperty("playback-time", [](nlohmann::json v) {
+                    Interface::onSeek(v["data"]);
                 });
             }
 
