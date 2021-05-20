@@ -1,7 +1,6 @@
 #include <iostream>
-#include "MpvSocket.h"
 #include "ChildProcess.h"
-#include "MpvController.h"
+#include "MpvSocket.h"
 #include "Interface.h"
 
 
@@ -12,8 +11,8 @@ int main() try {
             --input-ipc-server=./mpvsocket --loop --mute --no-terminal --fs=no");
 
 
-    MpvSocket sock ("/home/dek/proj/usock/mpvsocket");
-    while ( !sock.Connect() ) {
+    MpvSocket mpv ("/home/dek/proj/usock/mpvsocket");
+    while ( !mpv.Connect() ) {
         if (mpv_process.Finished()) {
             std::cerr << "mpv process exited unexpectedly with code ";
             std::cerr << mpv_process.Wait() << '\n';
@@ -21,9 +20,6 @@ int main() try {
         }
         std::this_thread::yield();
     }
-
-
-    MpvController mpv { sock };
 
 
     auto cin_th = std::thread([&mpv]() {
@@ -50,33 +46,30 @@ int main() try {
 
 
     std::optional<bool> paused;
+
+    mpv.on("unpause", [&mpv, &paused](nlohmann::json) {
+        mpv.GetProperty("playback-time", [&paused](nlohmann::json v) {
+            if (paused.value_or(true) == false) { return; }
+            Interface::onUnpause(v["data"]);
+            paused = false;
+        });
+    });
+    mpv.on("pause", [&mpv, &paused](nlohmann::json) {
+        mpv.GetProperty("playback-time", [&paused](nlohmann::json v) {
+            if (paused.value_or(false) == true) { return; }
+            Interface::onPause(v["data"]);
+            paused = true;
+        });
+    });
+    mpv.on("seek", [&mpv](nlohmann::json) {
+        mpv.GetProperty("playback-time", [](nlohmann::json v) {
+            Interface::onSeek(v["data"]);
+        });
+    });
+
+    // Main loop
     while (!mpv_process.Finished()) {
-        std::string cmd = sock.Receive();
-        if (!cmd.empty()) {
-            std::cout << "cmd: " << cmd << '\n';
-            mpv.onReceived(cmd);
-
-            if (cmd == R"({"event":"unpause"})") {
-                mpv.GetProperty("playback-time", [&paused](nlohmann::json v) {
-                    if (paused.value_or(true) == false) { return; }
-                    Interface::onUnpause(v["data"]);
-                    paused = false;
-                });
-            }
-            if (cmd == R"({"event":"pause"})") {
-                mpv.GetProperty("playback-time", [&paused](nlohmann::json v) {
-                    if (paused.value_or(false) == true) { return; }
-                    Interface::onPause(v["data"]);
-                    paused = true;
-                });
-            }
-            if (cmd == R"({"event":"seek"})") {
-                mpv.GetProperty("playback-time", [](nlohmann::json v) {
-                    Interface::onSeek(v["data"]);
-                });
-            }
-
-        }
+        mpv.onTick();
         Interface::onTick();
         std::this_thread::yield();
     }
