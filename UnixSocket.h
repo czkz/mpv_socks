@@ -24,7 +24,7 @@ public:
 public:
     UnixSocket(std::string_view path) {
         if ( path.size() > sizeof(sockaddr_un::sun_path) - 1 ) {
-            throw std::runtime_error("UnixSocket::UnixSocket(): path too long");
+            throw exception("UnixSocket::UnixSocket(): path too long");
         }
 
         sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -47,11 +47,11 @@ public:
     void Send(std::string_view data) {
         int err = write(sockfd, data.data(), data.size());
         if (err == -1){
-            throw std::runtime_error("In UnixSocket::Send(): write() failed");
+            throw exception("In UnixSocket::Send(): write() failed");
         }
     }
 
-    /// Receives an undetermined amount of whole lines
+    /// Receives all available data
     std::string Receive() {
         std::string ret;
         constexpr size_t BUF_SIZE = 256;
@@ -59,15 +59,18 @@ public:
 
         do {
             std::string buf (BUF_SIZE, '\0');
-            n = read(sockfd, buf.data(), buf.size());
+            n = recv(sockfd, buf.data(), buf.size(), MSG_DONTWAIT);
             if (n < 0) {
-                throw std::runtime_error("In UnixSocket::Receive(): read() failed");
+                if (errno == EWOULDBLOCK) {
+                    n = 0;
+                } else {
+                    throw exception("In UnixSocket::Receive(): read() failed");
+                }
             }
             buf.resize(n);
             ret += buf;
-        } while (ret.back() != '\n');
+        } while (n != 0);
         return ret;
     }
-
 };
 

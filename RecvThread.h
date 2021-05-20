@@ -6,47 +6,66 @@
 #include <thread>
 #include <atomic>
 
-#include "UnixSocket.h"
+#include "MpvSocket.h"
 
 class RecvThread {
 public:
-    using commandHandler_t = std::function<void(std::string)>;
+    using cmd_callback_t = std::function<void(std::string)>;
 private:
-    static void threadFunc(UnixSocket& sock,
-                           commandHandler_t callback,
-                           const std::atomic_bool& stop_flag) try {
-        using std::string;
+    static void threadFunc(MpvSocket& sock,
+                           cmd_callback_t callback,
+                           const std::atomic_bool& stop_flag)
+    try {
         while (stop_flag.load() == false) {
-            std::istringstream ss { sock.Receive() };
-
-            std::string cmd;
-            while (std::getline(ss, cmd)) {
+            while(true) {
+                std::string cmd = sock.Receive();
+                if (cmd.empty()) { break; }
                 callback(cmd);
             }
+            std::this_thread::yield();
         }
-    } catch (const UnixSocket::exception& e) {
-        std::cout << "threadFunc() caught exception: " << e.what() << '\n';
-        printf("errno: %d %s\n", errno, strerror(errno));
+    } catch (const std::exception& e) {
+        std::cerr << "threadFunc() caught exception: " << e.what() << '\n';
+        fprintf(stderr, "errno: %d %s\n", errno, strerror(errno));
+    } catch (...) {  // while loop is broken, so this is somewhat reasonable
+        std::cerr << "threadFunc() caught an unknown exception\n";
     }
 
     std::atomic_bool stop_flag;
     std::thread thread_handle;
 
+    cmd_callback_t cmd_callback;
+
 public:
-    RecvThread(UnixSocket& sock, commandHandler_t callback) {
-        thread_handle = std::thread(threadFunc,
-                                    std::ref(sock),
-                                    std::move(callback),
-                                    std::cref(stop_flag));
-    }
+    RecvThread() = default;
 
     ~RecvThread() {
         this->Stop();
+        this->Wait();
+    }
+
+    bool SetCmdCallback(cmd_callback_t v) {
+        if (thread_handle.joinable()) { return false; }
+        cmd_callback = v;
+        return true;
+    }
+
+    void Start(MpvSocket& sock) {
+        thread_handle = std::thread(threadFunc,
+                                    std::ref(sock),
+                                    cmd_callback,
+                                    std::cref(stop_flag));
     }
 
     void Stop() {
         if (thread_handle.joinable()) {
             stop_flag.store(true);
+        }
+    }
+
+    /// aka std::thread::join()
+    void Wait() {
+        if (thread_handle.joinable()) {
             thread_handle.join();
         }
     }
