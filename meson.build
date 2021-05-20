@@ -6,5 +6,6 @@ add_project_arguments('-std=c++20', language : 'cpp')
 
 executable('mpv-controller',
            'main.cpp',
+           'Interface.cpp',
            dependencies : dependency('threads'),
            install : false)

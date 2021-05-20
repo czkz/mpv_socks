@@ -2,6 +2,7 @@
 #include "MpvSocket.h"
 #include "ChildProcess.h"
 #include "PropertyGetter.h"
+#include "Interface.h"
 
 
 int main() try {
@@ -48,26 +49,50 @@ int main() try {
     });
 
 
+    Interface::onInit();
+
+
+    std::optional<bool> paused;
     PropertyGetter propertyGetter { sock };
     while (!mpv_process.Finished()) {
         std::string cmd = sock.Receive();
         if (!cmd.empty()) {
-            std::cout << "cmd: " << cmd << '\n';
+            // std::cout << "cmd: " << cmd << '\n';
             propertyGetter.onReceived(cmd);
-            // if (cmd == R"({"event":"unpause"})") { std::cout << "!!!unpause\n"; }
-            // if (cmd == R"({"event":"pause"})") { std::cout << "!!!pause\n"; }
-            if (cmd == R"({"event":"seek"})") {
-                std::cout << "!!!seek\n";
-                propertyGetter.GetProperty("playback-time", [](std::string v) {
+
+            if (cmd == R"({"event":"unpause"})") {
+                propertyGetter.GetProperty("playback-time", [&paused](std::string v) {
+                    if (paused.value_or(true) == false) { return; }
                     float playback_time = std::atof(v.c_str());
-                    std::cout << "!!!playback-time: " << playback_time << '\n';
+                    Interface::onUnpause(playback_time);
+                    paused = false;
                 });
             }
-        };
+            if (cmd == R"({"event":"pause"})") {
+                propertyGetter.GetProperty("playback-time", [&paused](std::string v) {
+                    if (paused.value_or(false) == true) { return; }
+                    float playback_time = std::atof(v.c_str());
+                    Interface::onPause(playback_time);
+                    paused = true;
+                });
+            }
+            if (cmd == R"({"event":"seek"})") {
+                propertyGetter.GetProperty("playback-time", [](std::string v) {
+                    float playback_time = std::atof(v.c_str());
+                    Interface::onSeek(playback_time);
+                });
+            }
+
+        }
+        Interface::onTick();
+        std::this_thread::yield();
     }
     int code = mpv_process.Wait();
-    if (code != 0) { std::cout << code << '\n'; }
+    if (code != 0) { std::cout << "mpv return code: " << code << '\n'; }
 
+    Interface::onQuit();
+
+    std::cin.setstate(std::ios::eofbit);
     cin_th.join();
 
 
