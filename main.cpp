@@ -1,6 +1,7 @@
 #include <iostream>
 #include "MpvSocket.h"
 #include "ChildProcess.h"
+#include "PropertyGetter.h"
 
 
 int main() try {
@@ -47,13 +48,21 @@ int main() try {
     });
 
 
+    PropertyGetter propertyGetter { sock };
     while (!mpv_process.Finished()) {
         std::string cmd = sock.Receive();
         if (!cmd.empty()) {
             std::cout << "cmd: " << cmd << '\n';
-            if (cmd == R"({"event":"unpause"})") { std::cout << "!!!unpause\n"; }
-            if (cmd == R"({"event":"pause"})") { std::cout << "!!!pause\n"; }
-            if (cmd == R"({"event":"seek"})") { std::cout << "!!!seek\n"; }
+            propertyGetter.onReceived(cmd);
+            // if (cmd == R"({"event":"unpause"})") { std::cout << "!!!unpause\n"; }
+            // if (cmd == R"({"event":"pause"})") { std::cout << "!!!pause\n"; }
+            if (cmd == R"({"event":"seek"})") {
+                std::cout << "!!!seek\n";
+                propertyGetter.GetProperty("playback-time", [](std::string v) {
+                    float playback_time = std::atof(v.c_str());
+                    std::cout << "!!!playback-time: " << playback_time << '\n';
+                });
+            }
         };
     }
     int code = mpv_process.Wait();
