@@ -9,6 +9,9 @@
 #include <unistd.h>
 #include <sys/un.h>
 
+// Unix signal() include
+#include <signal.h>
+
 
 class UnixSocket {
 private:
@@ -23,6 +26,8 @@ public:
 
 public:
     UnixSocket(std::string_view path) {
+        signal(SIGPIPE, SIG_IGN);  // Probably shouldn't do that
+
         if ( path.size() > sizeof(sockaddr_un::sun_path) - 1 ) {
             throw exception("UnixSocket::UnixSocket(): path too long");
         }

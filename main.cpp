@@ -1,31 +1,16 @@
 #include <iostream>
-#include "UnixSocket.h"
-#include "RecvThread.h"
+#include "MpvSocket.h"
 #include "ChildProcess.h"
 
 
 int main() try {
 
     ChildProcess mpv_process;
-    RecvThread recv_th;
-    MpvSocket sock ("/home/dek/proj/usock/mpvsocket");
-
-    mpv_process.SetExitCallback( [&recv_th](int code) {
-        if (code != 0) { std::cout << code << '\n'; }
-        recv_th.Stop();
-    });
-
-    recv_th.SetCmdCallback( [](std::string cmd) {
-        std::cout << "cmd: " << cmd << '\n';
-        if (cmd == R"({"event":"unpause"})") { std::cout << "!!!unpause\n"; }
-        if (cmd == R"({"event":"pause"})") { std::cout << "!!!pause\n"; }
-        if (cmd == R"({"event":"seek"})") { std::cout << "!!!seek\n"; }
-    });
-
-
     mpv_process.Start("mpv ~/Downloads/15919603606180.mp4 \
             --input-ipc-server=./mpvsocket --loop --mute --no-terminal --fs=no");
 
+
+    MpvSocket sock ("/home/dek/proj/usock/mpvsocket");
     while ( !sock.Connect() ) {
         if (mpv_process.Finished()) {
             std::cerr << "mpv process exited unexpectedly with code ";
@@ -35,30 +20,47 @@ int main() try {
         std::this_thread::yield();
     }
 
-    recv_th.Start(sock);
-
 
     // auto j_str = JSON_Object::forge("command",
     //                                 JSON_Array::forge("set_property", "pause", true)).str();
     // j_str += '\n';
     // sock.Send(j_str);
 
-    std::string s;
-    while (std::getline(std::cin, s)) {
-        if (s == "play") {
-            sock.Send("{ \"command\": [\"set_property\", \"pause\", false] }\n");
-        } else if (s == "pause") {
-            sock.Send("{ \"command\": [\"set_property\", \"pause\", true] }\n");
-        } else if (s == "pause") {
-            sock.Send("{ \"command\": [\"get_property\", \"playback-time\"] }\n");
-        } else {
-            std::cout << "Unknown command\n";
+    auto cin_th = std::thread([&sock]() {
+        std::string s;
+        while (std::getline(std::cin, s)) {
+            if (s == "play") {
+                sock.Send("{ \"command\": [\"set_property\", \"pause\", false] }\n");
+            } else if (s == "pause") {
+                sock.Send("{ \"command\": [\"set_property\", \"pause\", true] }\n");
+            } else if (s.substr(0, 5) == "seek ") {
+                int time = std::atoi(s.substr(5).c_str());
+                sock.Send("{ \"command\": [\"seek\", " +
+                        std::to_string(time) + ", \"relative\"] }\n");
+            } else {
+                std::cout << "Unknown command\n";
+            }
         }
-    }
+        try {  // If mpv is closed this will throw
+            sock.Send("{ command: [\"quit\"] }\n");
+        } catch (const UnixSocket::exception& e) { }
+    });
 
-    sock.Send("{ command: [\"quit\"] }\n");
-    mpv_process.Wait();
-    recv_th.Wait();
+
+    while (!mpv_process.Finished()) {
+        std::string cmd = sock.Receive();
+        if (!cmd.empty()) {
+            std::cout << "cmd: " << cmd << '\n';
+            if (cmd == R"({"event":"unpause"})") { std::cout << "!!!unpause\n"; }
+            if (cmd == R"({"event":"pause"})") { std::cout << "!!!pause\n"; }
+            if (cmd == R"({"event":"seek"})") { std::cout << "!!!seek\n"; }
+        };
+    }
+    int code = mpv_process.Wait();
+    if (code != 0) { std::cout << code << '\n'; }
+
+    cin_th.join();
+
 
 } catch (const std::exception& e) {
     std::cerr << "Caught exception: " << e.what() << '\n';
