@@ -25,11 +25,13 @@ public:
     ChildProcess() = default;
     ChildProcess(const char* cmd) { this->Start(cmd); }
 
-    void Start(const char* cmd) {
+    bool Start(const char* cmd) {
+        if (thread_handle.joinable()) { return false; }
         thread_handle = std::thread(threadFunc, cmd, this);
+        return true;
     }
 
-    bool Finished() {
+    bool Finished() const {
         return finished;
     }
 

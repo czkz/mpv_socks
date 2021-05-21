@@ -1,6 +1,7 @@
 #include <iostream>
 #include "ChildProcess.h"
 #include "MpvSocket.h"
+#include "MpvController.h"
 #include "Interface.h"
 
 
@@ -8,7 +9,7 @@ int main() try {
 
     ChildProcess mpv_process;
     mpv_process.Start("mpv ~/Downloads/15919603606180.mp4 \
-            --input-ipc-server=./mpvsocket --loop --mute --no-terminal --fs=no");
+            --input-ipc-server=./mpvsocket --loop --mute --no-terminal --fs=no --pause");
 
 
     MpvSocket mpv ("/home/dek/proj/usock/mpvsocket");
@@ -22,65 +23,42 @@ int main() try {
     }
 
 
-    auto cin_th = std::thread([&mpv]() {
-        std::string s;
-        while (std::getline(std::cin, s)) {
-            if (s == "play") {
-                mpv.SetProperty("pause", false);
-            } else if (s == "pause") {
-                mpv.SetProperty("pause", true);
-            } else if (s.substr(0, 5) == "seek ") {
-                int time = std::atoi(s.substr(5).c_str());
-                mpv.Command({"seek", time, "relative"});
-            } else if (!s.empty()){
-                std::cout << "Unknown command\n";
-            }
-        }
-        try {  // If mpv is closed this will throw
-            mpv.Command({"quit"});
-        } catch (const UnixSocket::exception& e) { }
-    });
-
-
-    Interface::onInit();
-
+    MpvController mpv_controller { mpv };
+    Interface::onInit(mpv_controller);
 
     std::optional<bool> paused;
-
-    mpv.on("unpause", [&mpv, &paused](nlohmann::json) {
-        mpv.GetProperty("playback-time", [&paused](nlohmann::json v) {
+    mpv.on("unpause", [&](nlohmann::json) {
+        mpv.GetProperty("playback-time", [&](nlohmann::json v) {
             if (paused.value_or(true) == false) { return; }
-            Interface::onUnpause(v["data"]);
+            Interface::onUnpause(mpv_controller, v["data"]);
             paused = false;
         });
     });
-    mpv.on("pause", [&mpv, &paused](nlohmann::json) {
-        mpv.GetProperty("playback-time", [&paused](nlohmann::json v) {
+    mpv.on("pause", [&paused, &mpv, &mpv_controller](nlohmann::json) {
+        mpv.GetProperty("playback-time", [&](nlohmann::json v) {
             if (paused.value_or(false) == true) { return; }
-            Interface::onPause(v["data"]);
+            Interface::onPause(mpv_controller, v["data"]);
             paused = true;
         });
     });
-    mpv.on("seek", [&mpv](nlohmann::json) {
-        mpv.GetProperty("playback-time", [](nlohmann::json v) {
-            Interface::onSeek(v["data"]);
+    // "seek" event gives wrong playback-time
+    mpv.on("playback-restart", [&](nlohmann::json) {
+        mpv.GetProperty("playback-time", [&](nlohmann::json v) {
+            Interface::onSeek(mpv_controller, v["data"]);
         });
     });
 
     // Main loop
     while (!mpv_process.Finished()) {
         mpv.onTick();
-        Interface::onTick();
-        std::this_thread::yield();
+        Interface::onTick(mpv_controller);
+        std::this_thread::sleep_for(std::chrono::milliseconds(0));
     }
     int code = mpv_process.Wait();
     if (code != 0) { std::cout << "mpv return code: " << code << '\n'; }
 
     Interface::onQuit();
-
-    std::cin.setstate(std::ios::eofbit);
-    cin_th.join();
-
+    (void) mpv_controller;  // Must still exist
 
 } catch (const std::exception& e) {
     std::cerr << "Caught exception: " << e.what() << '\n';
