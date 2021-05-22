@@ -13,7 +13,7 @@ namespace Interface {
         mpv.Play();
     }
     void onTick(MpvController&) {
-        std::cout << "Interface::onTick()\n";
+        // std::cout << "Interface::onTick()\n";
     }
     void onPause(MpvController&, float playback_time) {
         std::cout << "Interface::onPause(" << playback_time << ")\n";

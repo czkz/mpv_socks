@@ -26,8 +26,6 @@ public:
 
 public:
     UnixSocket(std::string_view path) {
-        signal(SIGPIPE, SIG_IGN);  // Probably shouldn't do that
-
         if ( path.size() > sizeof(sockaddr_un::sun_path) - 1 ) {
             throw exception("UnixSocket::UnixSocket(): path too long");
         }
@@ -50,7 +48,7 @@ public:
     }
 
     void Send(std::string_view data) {
-        int err = write(sockfd, data.data(), data.size());
+        int err = send(sockfd, data.data(), data.size(), MSG_NOSIGNAL);
         if (err == -1){
             throw exception("In UnixSocket::Send(): write() failed");
         }
@@ -64,7 +62,7 @@ public:
 
         do {
             std::string buf (BUF_SIZE, '\0');
-            n = recv(sockfd, buf.data(), buf.size(), MSG_DONTWAIT);
+            n = recv(sockfd, buf.data(), buf.size(), MSG_NOSIGNAL | MSG_DONTWAIT);
             if (n < 0) {
                 if (errno == EWOULDBLOCK) {
                     n = 0;

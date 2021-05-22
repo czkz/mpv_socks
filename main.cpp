@@ -70,11 +70,15 @@ int main() try {
     registerEventHandlers(mpv, mpv_controller, paused, file_ready_seek);
 
     // Main loop
-    while (!mpv_process.Finished()) {
-        mpv.onTick();
-        if (file_ready_seek) { Interface::onTick(mpv_controller); }
-        std::this_thread::yield();
-        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    try {
+        while (!mpv_process.Finished()) {
+            mpv.onTick();
+            if (file_ready_seek) { Interface::onTick(mpv_controller); }
+            std::this_thread::yield();
+        }
+    } catch (const UnixSocket& e) {
+        // send() broken pipe
+        if (errno != 32) { throw; }
     }
     int code = mpv_process.Wait();
     if (code != 0) { std::cout << "mpv return code: " << code << '\n'; }

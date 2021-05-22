@@ -16,11 +16,12 @@ private:
     std::atomic_bool finished = false;
 
 public:
-    // ~ChildProcess() {
-    //     if (thread_handle.joinable()) {
-    //         thread_handle.join();
-    //     }
-    // }
+    // Helps with debugging a lot
+    ~ChildProcess() {
+        if (thread_handle.joinable()) {
+            thread_handle.join();
+        }
+    }
 
     ChildProcess() = default;
     ChildProcess(const char* cmd) { this->Start(cmd); }

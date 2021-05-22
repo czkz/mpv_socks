@@ -60,33 +60,34 @@ public:
     }
 
     void onTick() {
-        std::string line = this->Receive();
-        if (line.empty()) { return; }
-        // std::clog << "cmd: " << line << '\n';
+        while (true) {
+            std::string line = this->Receive();
+            if (line.empty()) { return; }
+            // std::clog << "cmd: " << line << '\n';
 
-        auto j = nlohmann::json::parse(std::move(line));
+            auto j = nlohmann::json::parse(std::move(line));
 
-        if (j.contains("request_id")) {
-            size_t id = j["request_id"];
+            if (j.contains("request_id")) {
+                size_t id = j["request_id"];
 
-            auto it = pending_requests.find(id);
-            if (it != pending_requests.end()) {
-                const std::string error = j["error"];
-                if (error == "success" && it->second.first) {
-                    it->second.first(std::move(j));
-                } else if (it->second.second) {
-                    it->second.second(std::move(j));
+                auto it = pending_requests.find(id);
+                if (it != pending_requests.end()) {
+                    const std::string error = j["error"];
+                    if (error == "success" && it->second.first) {
+                        it->second.first(std::move(j));
+                    } else if (it->second.second) {
+                        it->second.second(std::move(j));
+                    }
+                    pending_requests.erase(it);
                 }
-                pending_requests.erase(it);
-            }
-        } else if (j.contains("event")) {
-            std::string event = j["event"];
+            } else if (j.contains("event")) {
+                std::string event = j["event"];
 
-            auto it = event_listeners.find(event);
-            if (it != event_listeners.end()) {
-                it->second(std::move(j));
+                auto it = event_listeners.find(event);
+                if (it != event_listeners.end()) {
+                    it->second(std::move(j));
+                }
             }
         }
-
     }
 };
