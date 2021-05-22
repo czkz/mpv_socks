@@ -22,7 +22,17 @@ namespace {
                 } else if (cmd == "t") {
                     float time;
                     sock.ReceiveInto(&time, sizeof(time));
-                    mpv.SetPlaybackTime(time);
+                    std::clog << "Got time " << time << '\n';
+                    mpv.Raw().GetProperty("playback-time", [&](auto v) {
+                        float local_time = v["data"];
+                        float d = std::abs(time - local_time);
+                        std::clog << "Current: " << local_time;
+                        std::clog << ", requested: " << time;
+                        std::clog << ", diff: " << d << "\n";
+                        if (d >= 0.5) {
+                            mpv.SetPlaybackTime(time);
+                        }
+                    });
                 } else if (!cmd.empty()) {
                     std::clog << "Unknown command\n";
                 }
@@ -63,7 +73,10 @@ namespace Interface {
         sock.Send(std::string("+"));
         std::clog << "play\n";
     }
-    void onSeek(MpvController&, float) {
+    void onSeek(MpvController&, float time) {
+        sock.Send(std::string("t"));
+        sock.Send(&time, sizeof(time));
+        std::clog << "time\n";
     }
     void onDestroy() { }
 }
