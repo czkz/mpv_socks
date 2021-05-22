@@ -53,7 +53,7 @@ int main() try {
     mpv_process.Start("mpv --input-ipc-server=./mpvsocket \
             --loop --mute --no-terminal --fs=no --pause -- " "https://youtu.be/r2LpOUwca94");
 
-    MpvSocket mpv ("/home/dek/proj/usock/mpvsocket");
+    MpvSocket mpv ("./mpvsocket");
     while ( !mpv.Connect() ) {
         if (mpv_process.Finished()) {
             std::cerr << "mpv process exited unexpectedly with code ";
