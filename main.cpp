@@ -4,29 +4,18 @@
 #include "MpvController.h"
 #include "Interface.h"
 
+class InterfaceInitGuard {
+public:
+    const bool initSuccessful;
+    InterfaceInitGuard() : initSuccessful(Interface::onInit()) { }
+    ~InterfaceInitGuard() { Interface::onDestroy(); }
+};
 
-int main() try {
-
-    ChildProcess mpv_process;
-    mpv_process.Start("mpv ~/Downloads/15919603606180.mp4 \
-            --input-ipc-server=./mpvsocket --loop --mute --no-terminal --fs=no --pause");
-
-
-    MpvSocket mpv ("/home/dek/proj/usock/mpvsocket");
-    while ( !mpv.Connect() ) {
-        if (mpv_process.Finished()) {
-            std::cerr << "mpv process exited unexpectedly with code ";
-            std::cerr << mpv_process.Wait() << '\n';
-            return 1;
-        }
-        std::this_thread::yield();
-    }
-
-
-    MpvController mpv_controller { mpv };
-    Interface::onInit(mpv_controller);
-
-    std::optional<bool> paused;
+void registerEventHandlers(MpvSocket& mpv,
+                           MpvController& mpv_controller,
+                           std::optional<bool>& paused,
+                           bool& file_ready_seek)
+{
     mpv.on("unpause", [&](nlohmann::json) {
         mpv.GetProperty("playback-time", [&](nlohmann::json v) {
             if (paused.value_or(true) == false) { return; }
@@ -43,16 +32,49 @@ int main() try {
     });
     // "seek" event gives wrong playback-time
     mpv.on("playback-restart", [&](nlohmann::json) {
-        mpv.GetProperty("playback-time", [&](nlohmann::json v) {
-            Interface::onSeek(mpv_controller, v["data"]);
-        });
+        if (!file_ready_seek) {
+            file_ready_seek = true;
+            Interface::onReady(mpv_controller);
+        } else {
+            mpv.GetProperty("playback-time", [&](nlohmann::json v) {
+                Interface::onSeek(mpv_controller, v["data"]);
+            });
+        }
     });
+}
+
+int main() try {
+    InterfaceInitGuard init_guard { };
+    if (!init_guard.initSuccessful) {
+        return 1;
+    }
+
+    ChildProcess mpv_process;
+    mpv_process.Start("mpv --input-ipc-server=./mpvsocket \
+            --loop --mute --no-terminal --fs=no --pause -- " "https://youtu.be/r2LpOUwca94");
+
+    MpvSocket mpv ("/home/dek/proj/usock/mpvsocket");
+    while ( !mpv.Connect() ) {
+        if (mpv_process.Finished()) {
+            std::cerr << "mpv process exited unexpectedly with code ";
+            std::cerr << mpv_process.Wait() << '\n';
+            return 1;
+        }
+        std::this_thread::yield();
+    }
+
+    MpvController mpv_controller { mpv };
+
+    std::optional<bool> paused;
+    bool file_ready_seek = false;
+    registerEventHandlers(mpv, mpv_controller, paused, file_ready_seek);
 
     // Main loop
     while (!mpv_process.Finished()) {
         mpv.onTick();
-        Interface::onTick(mpv_controller);
-        std::this_thread::sleep_for(std::chrono::milliseconds(0));
+        if (file_ready_seek) { Interface::onTick(mpv_controller); }
+        std::this_thread::yield();
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
     int code = mpv_process.Wait();
     if (code != 0) { std::cout << "mpv return code: " << code << '\n'; }

@@ -31,7 +31,7 @@ namespace {
 }
 
 namespace Interface {
-    void onInit(MpvController& mpv) {
+    void onReady(MpvController& mpv) {
         cin_thread = std::thread(thread_func, std::ref(mpv));
         mpv.Play();
     }
@@ -41,6 +41,8 @@ namespace Interface {
         cin_thread.join();
     }
 
+    bool onInit() { return true; }
+    void onDestroy() { }
     void onTick(MpvController&) { }
     void onPause(MpvController&, float) { }
     void onUnpause(MpvController&, float) { }
