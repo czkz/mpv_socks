@@ -14,12 +14,12 @@ namespace {
             } else if (cmd == "quit") {
                 mpv.Quit();
                 break;
-            } else if (cmd == "seek") {
+            } else if (cmd == "set") {
                 int time;
                 std::cin >> time;
-                mpv.Seek(time);
+                mpv.SetPlaybackTime(time);
             } else if (!cmd.empty()){
-                std::cout << "Unknown command\n";
+                std::clog << "Unknown command\n";
             }
         }
         try {  // If mpv is closed this will throw
@@ -33,18 +33,28 @@ namespace {
 namespace Interface {
     void onReady(MpvController& mpv) {
         cin_thread = std::thread(thread_func, std::ref(mpv));
-        mpv.Play();
+        // mpv.Play();
     }
     void onQuit() {
-        std::cout << "Interface::onQuit()\n";
-        std::cin.setstate(std::ios::eofbit);
+        std::clog << "Interface::onQuit()\n";
+        std::cin.setstate(std::ios::badbit);
         cin_thread.join();
     }
 
-    bool onInit() { return true; }
+    bool onInit() {
+        std::clog << "Interface::onInit()\n";
+        return true;
+    }
+    void onTick(MpvController&) {
+        // std::clog << "Interface::onTick()\n";
+    }
+    void onPause(MpvController&, float) {
+        std::cout << "pause\n";
+    }
+    void onUnpause(MpvController&, float) {
+        std::cout << "play\n";
+    }
+    void onSeek(MpvController&, float) {
+    }
     void onDestroy() { }
-    void onTick(MpvController&) { }
-    void onPause(MpvController&, float) { }
-    void onUnpause(MpvController&, float) { }
-    void onSeek(MpvController&, float) { }
 }
