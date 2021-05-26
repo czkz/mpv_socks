@@ -5,8 +5,8 @@
 
 class ChildProcess {
 private:
-    static void threadFunc(const char* cmd, ChildProcess* _this) {
-        int code = std::system(cmd);
+    static void threadFunc(std::string cmd, ChildProcess* _this) {
+        int code = std::system(cmd.c_str());
         _this->return_code = code;
         _this->finished = true;
     }
@@ -26,9 +26,9 @@ public:
     ChildProcess() = default;
     ChildProcess(const char* cmd) { this->Start(cmd); }
 
-    bool Start(const char* cmd) {
+    bool Start(std::string cmd) {
         if (thread_handle.joinable()) { return false; }
-        thread_handle = std::thread(threadFunc, cmd, this);
+        thread_handle = std::thread(threadFunc, std::move(cmd), this);
         return true;
     }
 

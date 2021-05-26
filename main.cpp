@@ -7,7 +7,7 @@
 class InterfaceInitGuard {
 public:
     const bool initSuccessful;
-    InterfaceInitGuard() : initSuccessful(Interface::onInit()) { }
+    InterfaceInitGuard(char** argv) : initSuccessful(Interface::onInit(argv)) { }
     ~InterfaceInitGuard() { Interface::onDestroy(); }
 };
 
@@ -43,15 +43,19 @@ void registerEventHandlers(MpvSocket& mpv,
     });
 }
 
-int main() try {
-    InterfaceInitGuard init_guard { };
-    if (!init_guard.initSuccessful) {
+int main(int argc, char** argv) try {
+    if (argc != 3) {
+        std::cerr << "usage: " << argv[0] << " SERVER VIDEO\n";
         return 1;
+    }
+    InterfaceInitGuard init_guard { argv };
+    if (!init_guard.initSuccessful) {
+        return 2;
     }
 
     ChildProcess mpv_process;
-    mpv_process.Start("mpv --input-ipc-server=./mpvsocket \
-            --loop --mute --no-terminal --fs=no --pause -- " "https://youtu.be/r2LpOUwca94");
+    mpv_process.Start("mpv --input-ipc-server=./mpvsocket "
+            "--loop --mute --no-terminal --fs=no --pause -- " + std::string(argv[2]));
 
     MpvSocket mpv ("./mpvsocket");
     while ( !mpv.Connect() ) {

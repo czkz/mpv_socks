@@ -46,9 +46,13 @@ namespace {
 }
 
 namespace Interface {
-    bool onInit() {
+    bool onInit(char** argv) {
         std::clog << "Interface::onInit()\n";
-        return sock.Connect("localhost", 5555);
+        if (!sock.Connect(argv[1], 5555)) {
+            std::cerr << "Could not connect to server.\n";
+            return false;
+        }
+        return true;
     }
 
     void onReady(MpvController& mpv) {

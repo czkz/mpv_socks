@@ -9,4 +9,4 @@ executable('mpv-controller',
            'main.cpp',
            'Interface_socks.cpp',
            dependencies : [ dependency('threads'), libsocks_dep ],
-           install : false)
+           install : true)

@@ -2,7 +2,7 @@
 #include "MpvController.h"
 
 namespace Interface {
-    bool onInit    ();                // Will exit() if false is returned
+    bool onInit    (char** argv);     // Will exit() if false is returned
     void onReady   (MpvController&);  // Mpv is ready, call mpv.Play()
     void onTick    (MpvController&);  // Called once per frame
     void onPause   (MpvController&, float playback_time);
