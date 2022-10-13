@@ -1,6 +1,8 @@
 # mpv-socks
 Synchronize multiple instances of mpv to remotely watch videos together.
 
+![](https://thumbs.gfycat.com/InsistentShyHyena-size_restricted.gif)
+
 ## Usage
 
 ### Build the project:
